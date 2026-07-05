@@ -23,14 +23,28 @@ memperbaiki kalimat yang sedang diketik.
 
 ## Fitur saat ini
 
-- Keyboard QWERTY dasar (huruf, spasi, enter, backspace, shift).
-- Tombol **"Rapikan"**: ambil 500 karakter sebelum kursor, kirim ke Kiosapi
-  (model `google/gemini-2.5-flash`), lalu ganti teks tsb dengan hasil yang
-  sudah dirapikan ejaan/tata bahasanya.
+Ada 3 tab di atas keyboard (mirip Gboard):
+
+- **⌨ Keyboard** — QWERTY dasar (huruf, spasi, enter, backspace, shift) +
+  tombol **"Rapikan"** yang ambil teks sebelum kursor, kirim ke Kiosapi,
+  lalu ganti dengan hasil yang sudah dirapikan ejaan/tata bahasanya.
+- **📋 Klip** — otomatis nyimpen histori copy (maks 15 item terakhir,
+  persist walau keyboard ditutup). Tap salah satu item buat paste ke teks
+  yang lagi diketik. Ada tombol "Kosongkan" buat hapus semua histori.
+- **✨ Tanya AI** — mode chat mini: ketik pertanyaan pake tombol keyboard
+  di bawah (ga langsung ke app, cuma masuk ke kotak pertanyaan), tekan
+  "Tanya" buat kirim ke Kiosapi, jawabannya muncul di kotak hijau. Ada
+  tombol "Sisipkan ke teks" buat masukin jawaban ke field yang lagi aktif,
+  dan "Hapus" buat reset.
+
+Catatan: QWERTY di bagian bawah selalu kepake buat ngetik di tab manapun —
+di tab "Tanya AI", tombol yang sama dipakai buat ngisi kotak pertanyaan,
+bukan langsung ngetik ke app.
 
 ## Ide pengembangan lanjut
 
 - Prediksi kata real-time (bukan cuma tombol manual).
 - Tombol "Ubah gaya" (formal/santai/singkat).
-- Suggestion strip di atas keyboard (kayak Gboard) yang nampilin 3 opsi kata.
+- Suggestion strip beneran (nampilin 3 opsi kata saat ngetik).
+- Histori percakapan "Tanya AI" (multi-turn, bukan cuma 1 pertanyaan).
 - Simpen histori "rapikan" biar bisa undo kalau hasil AI kurang pas.
