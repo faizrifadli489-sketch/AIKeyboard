@@ -40,7 +40,7 @@ import kotlin.concurrent.thread
  */
 class AIKeyboardService : InputMethodService() {
 
-    private enum class Panel { KEYBOARD, CLIPBOARD, AI }
+    private enum class Panel { KEYBOARD, CLIPBOARD, AI, EMOJI }
 
     private var currentPanel = Panel.KEYBOARD
     private var isShift = false
@@ -267,6 +267,9 @@ class AIKeyboardService : InputMethodService() {
             Panel.AI -> {
                 bodyContainer.addView(buildAiPanel())
             }
+            Panel.EMOJI -> {
+                bodyContainer.addView(buildEmojiPanel())
+            }
         }
     }
 
@@ -357,7 +360,7 @@ class AIKeyboardService : InputMethodService() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 background = makeDrawable(0xFF2C2C2E.toInt(), 6f)
-                layoutParams = LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+                layoutParams = LinearLayout.LayoutParams(0, dp(56), 1f).apply {
                     marginEnd = dp(3)
                 }
             }
@@ -365,7 +368,7 @@ class AIKeyboardService : InputMethodService() {
             if (hint != null) {
                 val hintView = TextView(this).apply {
                     text = hint.toString()
-                    textSize = 9f
+                    textSize = 10f
                     setTextColor(Color.parseColor("#7A7A80"))
                     gravity = Gravity.CENTER
                     setPadding(0, dp(2), 0, 0)
@@ -375,7 +378,7 @@ class AIKeyboardService : InputMethodService() {
 
             val charView = TextView(this).apply {
                 text = charToType
-                textSize = if (hint != null) 16f else 20f
+                textSize = if (hint != null) 18f else 23f
                 gravity = Gravity.CENTER
                 setTextColor(Color.WHITE)
                 if (hint != null) {
@@ -412,9 +415,9 @@ class AIKeyboardService : InputMethodService() {
             renderBody()
         })
 
-        // emoji placeholder
+        // emoji panel
         bottomRow.addView(makeSpecialKey(label = "😊", weight = 1.0f) {
-            Toast.makeText(this, "Emoji keyboard: belum aktif", Toast.LENGTH_SHORT).show()
+            switchPanel(Panel.EMOJI)
         })
 
         // globe (switch input method)
@@ -451,11 +454,11 @@ class AIKeyboardService : InputMethodService() {
         val bgColor = if (accent) 0xFF3B5BFE.toInt() else 0xFF1F1F22.toInt()
         return TextView(this).apply {
             text = label
-            textSize = if (bigSpace) 13f else 16f
+            textSize = if (bigSpace) 14f else 18f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             background = makeDrawable(bgColor, 6f)
-            layoutParams = LinearLayout.LayoutParams(0, dp(46), weight).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(56), weight).apply {
                 marginEnd = dp(3)
             }
             setPadding(dp(0), dp(0), dp(0), dp(0))
@@ -467,11 +470,11 @@ class AIKeyboardService : InputMethodService() {
     private fun makeRow3ActionKey(label: String, weight: Float, onClick: () -> Unit): TextView {
         return TextView(this).apply {
             text = label
-            textSize = 16f
+            textSize = 18f
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             background = makeDrawable(0xFF1F1F22.toInt(), 6f)
-            layoutParams = LinearLayout.LayoutParams(0, dp(46), weight).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(56), weight).apply {
                 marginEnd = dp(3)
             }
             setOnClickListener { onClick() }
@@ -480,7 +483,7 @@ class AIKeyboardService : InputMethodService() {
 
     private fun makeRow3Spacer(weight: Float): View {
         return View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, dp(46), weight).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(56), weight).apply {
                 marginEnd = dp(3)
             }
         }
@@ -570,6 +573,78 @@ class AIKeyboardService : InputMethodService() {
             setPadding(dp(4), dp(8), dp(4), dp(0))
         }
         panel.addView(info)
+        return panel
+    }
+
+    // ---------- EMOJI panel ----------
+
+    private val emojiSet = listOf(
+        "😀","😁","😂","🤣","😊","😍","😘","😜","🤔","😎",
+        "😢","😭","😡","🥺","😴","🥳","😱","🤯","🙄","😏",
+        "👍","👎","👌","✌️","🤞","👏","🙏","💪","🤝","👋",
+        "❤️","🔥","✨","🎉","💯","⭐","☀️","🌙","💀","🤡",
+        "🐱","🐶","🍕","🍔","☕","🎮","⚽","🚗","💰","📱"
+    )
+
+    private fun buildEmojiPanel(): LinearLayout {
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = makeDrawable(0xFF18181A.toInt(), 8f)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val title = TextView(this).apply {
+            text = "😊 Emoji"
+            textSize = 14f
+            setTextColor(Color.WHITE)
+            setTypeface(typeface, Typeface.BOLD)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        header.addView(title)
+        header.addView(makeIconKey("⌫", bg = 0xFF3A3A3D.toInt()) {
+            handleBackspace()
+        })
+        header.addView(makeIconKey("⌨", bg = 0xFF3A3A3D.toInt()) {
+            switchPanel(Panel.KEYBOARD)
+        })
+        panel.addView(header)
+
+        val scroll = ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(160)
+            )
+        }
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        val perRow = 8
+        var i = 0
+        while (i < emojiSet.size) {
+            val rowChunk = emojiSet.subList(i, minOf(i + perRow, emojiSet.size))
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(2), 0, dp(2))
+            }
+            for (emoji in rowChunk) {
+                val cell = TextView(this).apply {
+                    text = emoji
+                    textSize = 22f
+                    gravity = Gravity.CENTER
+                    layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f)
+                    setOnClickListener { typeChar(emoji) }
+                }
+                row.addView(cell)
+            }
+            grid.addView(row)
+            i += perRow
+        }
+        scroll.addView(grid)
+        panel.addView(scroll)
         return panel
     }
 
