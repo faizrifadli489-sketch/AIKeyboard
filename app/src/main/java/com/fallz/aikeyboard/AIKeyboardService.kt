@@ -8,6 +8,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.inputmethodservice.InputMethodService
 import android.os.Handler
+import android.text.SpannableString
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -358,19 +361,19 @@ class AIKeyboardService : InputMethodService() {
                 setPadding(0, dp(4), 0, dp(4))
                 if (hint != null) {
                     // Build multi-styled text: small hint on first line, big char second
-                    val ss = android.text.SpannableString("${hint}\n${charToType}")
+                    val ss = SpannableString("${hint}\n${charToType}")
                     ss.setSpan(
-                        android.text.RelativeSizeSpan(0.45f),
+                        RelativeSizeSpan(0.45f),
                         0, 1,
                         android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
                     ss.setSpan(
-                        android.text.ForegroundColorSpan(Color.parseColor("#7A7A80")),
+                        ForegroundColorSpan(Color.parseColor("#7A7A80")),
                         0, 1,
                         android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
                     ss.setSpan(
-                        android.text.RelativeSizeSpan(1.8f),
+                        RelativeSizeSpan(1.8f),
                         2, 3,
                         android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
