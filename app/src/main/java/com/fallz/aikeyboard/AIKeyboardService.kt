@@ -100,7 +100,7 @@ class AIKeyboardService : InputMethodService() {
         rootView = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#101012"))
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setPadding(dp(2), dp(2), dp(2), dp(2))
         }
 
         toolbarView = buildToolbar()
@@ -307,16 +307,8 @@ class AIKeyboardService : InputMethodService() {
             }
             container.addView(buildBottomRow())
         } else {
-            // ABC mode: row1 with side insets, row3 with shift+backspace keys on sides
-            val row1 = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                setPadding(dp(2), dp(2), dp(2), dp(2))
-            }
-            row1.addView(makeRow3Spacer(0.3f))
-            row1.addView(buildLetterRow(rows[0]))
-            row1.addView(makeRow3Spacer(0.3f))
-            container.addView(row1)
-
+            // ABC mode: row1 full-bleed (no side spacer), row3 with shift+backspace on sides
+            container.addView(buildLetterRow(rows[0]))
             container.addView(buildLetterRow(rows[1]))
 
             val row3 = LinearLayout(this).apply {
@@ -346,7 +338,6 @@ class AIKeyboardService : InputMethodService() {
         for (c in letters) {
             val displayChar = c.toString()
             val isLetterMode = !isSymbolsMode
-            // Number hint mapping (Q W E R T Y U I O P -> 1 2 3 4 5 6 7 8 9 0)
             val hint = if (isLetterMode) when (c.lowercaseChar()) {
                 'q' -> '1'; 'w' -> '2'; 'e' -> '3'; 'r' -> '4'; 't' -> '5'
                 'y' -> '6'; 'u' -> '7'; 'i' -> '8'; 'o' -> '9'; 'p' -> '0'
@@ -355,47 +346,43 @@ class AIKeyboardService : InputMethodService() {
 
             val charToType = if (isShift && isLetterMode) displayChar.uppercase() else displayChar.lowercase()
 
-            // Inner vertical container (hint on top, char centered)
-            val inner = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
+            // Single TextView per key; hint shown top-left via SpannableString
+            val keyView = TextView(this).apply {
+                background = makeDrawable(0xFF2C2C2E.toInt(), 8f)
+                setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
-                background = makeDrawable(0xFF2C2C2E.toInt(), 6f)
+                includeFontPadding = false
                 layoutParams = LinearLayout.LayoutParams(0, dp(56), 1f).apply {
                     marginEnd = dp(3)
                 }
-            }
-
-            if (hint != null) {
-                val hintView = TextView(this).apply {
-                    text = hint.toString()
-                    textSize = 10f
-                    setTextColor(Color.parseColor("#7A7A80"))
-                    gravity = Gravity.CENTER
-                    setPadding(0, dp(2), 0, 0)
-                }
-                inner.addView(hintView)
-            }
-
-            val charView = TextView(this).apply {
-                text = charToType
-                textSize = if (hint != null) 18f else 23f
-                gravity = Gravity.CENTER
-                setTextColor(Color.WHITE)
+                setPadding(0, dp(4), 0, dp(4))
                 if (hint != null) {
-                    setPadding(0, 0, 0, dp(2))
+                    // Build multi-styled text: small hint on first line, big char second
+                    val ss = android.text.SpannableString("${hint}\n${charToType}")
+                    ss.setSpan(
+                        android.text.RelativeSizeSpan(0.45f),
+                        0, 1,
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    ss.setSpan(
+                        android.text.ForegroundColorSpan(Color.parseColor("#7A7A80")),
+                        0, 1,
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    ss.setSpan(
+                        android.text.RelativeSizeSpan(1.8f),
+                        2, 3,
+                        android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                    text = ss
+                    gravity = Gravity.CENTER
                 } else {
-                    setPadding(0, 0, 0, 0)
+                    text = charToType
+                    textSize = 24f
                 }
+                setOnClickListener { typeChar(charToType) }
             }
-            // Weight child with fillParent width so center works
-            val charLp = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            )
-            inner.addView(charView, charLp)
-
-            inner.setOnClickListener { typeChar(charToType) }
-            rowLayout.addView(inner)
+            rowLayout.addView(keyView)
         }
         return rowLayout
     }
@@ -481,6 +468,7 @@ class AIKeyboardService : InputMethodService() {
         }
     }
 
+    @Suppress("unused")
     private fun makeRow3Spacer(weight: Float): View {
         return View(this).apply {
             layoutParams = LinearLayout.LayoutParams(0, dp(56), weight).apply {
