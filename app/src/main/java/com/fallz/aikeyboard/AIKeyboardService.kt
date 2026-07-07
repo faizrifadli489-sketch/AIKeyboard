@@ -47,7 +47,9 @@ class AIKeyboardService : InputMethodService() {
 
     private var currentPanel = Panel.KEYBOARD
     private var isShift = false
-    private var isSymbolsMode = false // false = abc, true = ?123 (numbers page)
+    private var isSymbolsMode = false // false = abc, true = numbers/symbols
+    private var symbolPage = 0 // 0 = "123", 1 = "=+/", 2 = "abc" shortcut stays in letters
+    private var emojiCategory = 0
 
     private lateinit var rootView: LinearLayout
     private lateinit var toolbarView: LinearLayout
@@ -80,10 +82,36 @@ class AIKeyboardService : InputMethodService() {
         "ASDFGHJKL",
         "ZXCVBNM"
     )
-    private val rowsSymbols = listOf(
-        "1234567890",
-        "!@#" + "$" + "%^&*()",
-        "-_=/.,?"
+
+    // Symbol pages. Page 0: 1 2 3 4..., Page 1: = + - _ etc, Page 2: punctuation
+    private val symbolPages = listOf(
+        listOf(
+            "1234567890",
+            "!@#" + "$" + "%^&*()",
+            "`~/\\()\"'<>"  // double-quote escaped as \"; final 8 chars
+        ),
+        listOf(
+            "=+-*/%",
+            "[]{}<>€¥£",
+            ".,;:?!#"
+        ),
+        listOf(
+            "@#$&_",
+            "|~\\\"'=^",
+            "()[]{}"
+        )
+    )
+
+    // Emoji categories (simplified — single categories, all unicode ranges per page)
+    private val emojiPages = listOf(
+        // Smileys
+        "😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🥸 🤩 🥳 😏 😒 😞 😔 😟 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🤭 🤫 🤥 😶 😐 😑 😬 🙄 😯 😦 😧 😮 😲 🥱 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 😈 👿 👹 👺 💀 👻 👽 🤖 💩 😺 😸 😹 😻 😼 😽 🙀 😿 😾"
+        // Hearts & symbols
+        ,
+        "❤ 🧡 💛 💚 💙 💜 🤎 🖤 🤍 💔 ❣ 💕 💞 💓 💗 💖 💘 💝 💟 ☮ ✝ ☪ 🕉 ☸ ✡ 🔯 🕎 ☯ ☦ 🛐 ⛎ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛ 🉑 ☢ ☣ 📵 🚫 ⛔ 💯 💢 ♨ 🈶 🈚 🈸 🈺 🈷 ✴ 🆚 💮 🉐 ㊙ 🏾 ㊗ 🈴 🆎 🆑 🅾 🆘 ❌ 🅰 🅱 🆖 🆗 🆙 🆚 🈁 🆠 🆡 🈂 🔠 🔡 🔢 🔣 🔤 🅿 🈯"
+        // Useful glyphs
+        ,
+        "👍 👎 👌 ✌ 🤞 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝ 👋 🤚 🖐 ✋ 🖖 👏 🙌 🤝 🙏 ✍ 💅 🤳 💪 🦾 🦵 🦿 🦶 👂 🦻 👃 🧠 🫀 🫁 🦷 🦴 👀 👁 👅 👄 💋 👶 🧒 👦 👧 🧑 👨 👩 🧓 👴 👵 👮 👷 💂 🕵 👼 🎅 🤶 🧙 🧝 🧛 🧟 🧞 🧜 👻 👹 👺 👽 🤖 💩 💀 ☠"
     )
 
     override fun onCreate() {
@@ -300,30 +328,57 @@ class AIKeyboardService : InputMethodService() {
         container.addView(statusView)
 
         val rows = when {
-            isSymbolsMode -> rowsSymbols
+            isSymbolsMode -> symbolPages[symbolPage]
             isShift -> rowsAlphaShift
             else -> rowsAlpha
         }
         if (isSymbolsMode) {
-            for (row in rows) {
-                container.addView(buildLetterRow(row))
-            }
-            container.addView(buildBottomRow())
-        } else {
-            // ABC mode: row1 full-bleed (no side spacer), row3 with shift+backspace on sides
+            // Symbols: same structure as ABC mode (row1, row2 full-width, row3 with action keys)
             container.addView(buildLetterRow(rows[0]))
             container.addView(buildLetterRow(rows[1]))
 
             val row3 = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
-                setPadding(dp(2), dp(2), dp(2), dp(2))
+                setPadding(dp(1), dp(1), dp(1), dp(1))
             }
-            row3.addView(makeRow3ActionKey("⇧", weight = 1.4f) {
+            // Left action: cycle symbol pages OR switch back to ABC
+            val shiftLabel = when (symbolPage) {
+                0 -> "=+/"
+                1 -> "ABC"
+                else -> "?123"
+            }
+            val isLastPage = symbolPage == symbolPages.size - 1
+            row3.addView(makeRow3ActionKey(shiftLabel, weight = 1.0f) {
+                if (isLastPage) {
+                    // Back to letters
+                    isSymbolsMode = false
+                    symbolPage = 0
+                } else {
+                    symbolPage++
+                }
+                renderBody()
+            })
+            row3.addView(buildLetterRow(rows[2]))
+            row3.addView(makeRow3ActionKey("⌫", weight = 1.0f) {
+                handleBackspace()
+            })
+            container.addView(row3)
+            container.addView(buildBottomRow())
+        } else {
+            // ABC mode: row1 full-bleed, row3 with shift+backspace on sides
+            container.addView(buildLetterRow(rows[0]))
+            container.addView(buildLetterRow(rows[1]))
+
+            val row3 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(1), dp(1), dp(1), dp(1))
+            }
+            row3.addView(makeRow3ActionKey(if (isShift) "⇪" else "⇧", weight = 1.0f) {
                 isShift = !isShift
                 renderBody()
             })
             row3.addView(buildLetterRow(rows[2]))
-            row3.addView(makeRow3ActionKey("⌫", weight = 1.4f) {
+            row3.addView(makeRow3ActionKey("⌫", weight = 1.0f) {
                 handleBackspace()
             })
             container.addView(row3)
@@ -335,7 +390,7 @@ class AIKeyboardService : InputMethodService() {
     private fun buildLetterRow(letters: String): LinearLayout {
         val rowLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(2), dp(2), dp(2), dp(2))
+            setPadding(dp(1), dp(1), dp(1), dp(1))
         }
 
         for (c in letters) {
@@ -355,7 +410,7 @@ class AIKeyboardService : InputMethodService() {
                 setTextColor(Color.WHITE)
                 gravity = Gravity.CENTER
                 includeFontPadding = false
-                layoutParams = LinearLayout.LayoutParams(0, dp(56), 1f).apply {
+                layoutParams = LinearLayout.LayoutParams(0, dp(60), 1f).apply {
                     marginEnd = dp(3)
                 }
                 setPadding(0, dp(4), 0, dp(4))
@@ -393,7 +448,7 @@ class AIKeyboardService : InputMethodService() {
     private fun buildBottomRow(): LinearLayout {
         val bottomRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(2), dp(2), dp(2), dp(2))
+            setPadding(dp(1), dp(1), dp(1), dp(1))
         }
 
         // ?123 / ABC toggle
@@ -448,7 +503,7 @@ class AIKeyboardService : InputMethodService() {
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             background = makeDrawable(bgColor, 6f)
-            layoutParams = LinearLayout.LayoutParams(0, dp(56), weight).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(60), weight).apply {
                 marginEnd = dp(3)
             }
             setPadding(dp(0), dp(0), dp(0), dp(0))
@@ -464,7 +519,7 @@ class AIKeyboardService : InputMethodService() {
             gravity = Gravity.CENTER
             setTextColor(Color.WHITE)
             background = makeDrawable(0xFF1F1F22.toInt(), 6f)
-            layoutParams = LinearLayout.LayoutParams(0, dp(56), weight).apply {
+            layoutParams = LinearLayout.LayoutParams(0, dp(60), weight).apply {
                 marginEnd = dp(3)
             }
             setOnClickListener { onClick() }
@@ -573,8 +628,35 @@ class AIKeyboardService : InputMethodService() {
         "😀","😁","😂","🤣","😊","😍","😘","😜","🤔","😎",
         "😢","😭","😡","🥺","😴","🥳","😱","🤯","🙄","😏",
         "👍","👎","👌","✌️","🤞","👏","🙏","💪","🤝","👋",
-        "❤️","🔥","✨","🎉","💯","⭐","☀️","🌙","💀","🤡",
-        "🐱","🐶","🍕","🍔","☕","🎮","⚽","🚗","💰","📱"
+        "❤","🔥","✨","🎉","💯","⭐","☀","🌙","💀","🤡",
+        "🐱","🐶","🍕","🍔","☕","🎮","⚽","🚗","💰","📱",
+        // Faces
+        "😀","😃","😄","😁","😆","😅","😂","🤣","😊","😇",
+        "🙂","🙃","😉","😌","😍","🥰","😘","😗","😙","😚",
+        "😋","😛","😝","😜","🤪","🤨","🧐","🤓","😎","🥸",
+        "🤩","🥳","😏","😒","😞","😔","😟","😕","🙁","☹",
+        "😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡",
+        "🤬","🤯","😳","🥵","🥶","😱","😨","😰","😥","😓",
+        // Hands & people
+        "👍","👎","👌","✌","🤞","🤟","🤘","🤙","👈","👉",
+        "👆","🖕","👇","☝","👋","🤚","🖐","✋","🖖","👏",
+        "🙌","🤝","🙏","✍","💅","🤳","💪","🦾","🦵","🦿",
+        "🦶","👂","🦻","👃","🧠","👀","👁","👅","👄","💋",
+        "👶","🧒","👦","👧","🧑","👨","👩","🧓","👴","👵",
+        // Hearts & symbols
+        "❤","🧡","💛","💚","💙","💜","🤎","🖤","🤍","💔",
+        "❣","💕","💞","💓","💗","💖","💘","💝","💟","♥",
+        // Food
+        "🍕","🍔","🍟","🌭","🥪","🌮","🌯","🥙","🧆","🥚",
+        "🍳","🥘","🍲","🥣","🥗","🍝","🍜","🍣","🍱","🥟",
+        "🍤","🍙","🍚","🍘","🍥","🥠","🥮","🍢","🍡","🍧",
+        // Animals
+        "🐶","🐱","🐭","🐹","🐰","🦊","🐻","🐼","🐨","🐯",
+        "🦁","🐮","🐷","🐽","🐸","🐵","🙈","🙉","🙊","🐒",
+        // Activities & travel
+        "⚽","🏀","🏈","⚾","🥎","🎾","🏐","🏉","🥏","🎱",
+        "🚗","🚕","🚙","🚌","🚎","🏎","🚓","🚑","🚒","🚐",
+        "✈","🚀","🛸","🚁","🛶","⛵","🚤","🛥","🛳","⛴"
     )
 
     private fun buildEmojiPanel(): LinearLayout {
@@ -604,19 +686,57 @@ class AIKeyboardService : InputMethodService() {
         })
         panel.addView(header)
 
+        // Category tabs
+        val tabs = listOf("Smiley", "Hands", "Heart", "Food", "Animal", "Travel")
+        val tabRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        tabs.forEachIndexed { idx, label ->
+            val chip = TextView(this).apply {
+                text = label
+                textSize = 11f
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                setPadding(dp(8), dp(4), dp(8), dp(4))
+                background = makeDrawable(
+                    if (idx == emojiCategory) 0xFF3B5BFE.toInt() else 0xFF2C2C2E.toInt(),
+                    6f
+                )
+                layoutParams = LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    dp(28)
+                ).apply { marginEnd = dp(4) }
+                setOnClickListener {
+                    emojiCategory = idx
+                    renderBody()
+                }
+            }
+            tabRow.addView(chip)
+        }
+        panel.addView(tabRow)
+
         val scroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(160)
+                dp(180)
             )
         }
         val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
+        // Pick emoji subset per category, drawn from emojiSet
+        val categorySize = 100
+        val startIdx = emojiCategory * categorySize
+        val endIdx = minOf(startIdx + categorySize, emojiSet.size)
+        val subset = if (startIdx < emojiSet.size) {
+            emojiSet.subList(startIdx, endIdx)
+        } else emptyList()
+
         val perRow = 8
         var i = 0
-        while (i < emojiSet.size) {
-            val rowChunk = emojiSet.subList(i, minOf(i + perRow, emojiSet.size))
+        while (i < subset.size) {
+            val rowChunk = subset.subList(i, minOf(i + perRow, subset.size))
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 setPadding(0, dp(2), 0, dp(2))
@@ -626,13 +746,26 @@ class AIKeyboardService : InputMethodService() {
                     text = emoji
                     textSize = 22f
                     gravity = Gravity.CENTER
-                    layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f)
+                    layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                        marginEnd = dp(2)
+                    }
+                    setPadding(0, dp(4), 0, dp(4))
                     setOnClickListener { typeChar(emoji) }
                 }
                 row.addView(cell)
             }
             grid.addView(row)
             i += perRow
+        }
+        if (subset.isEmpty()) {
+            val empty = TextView(this).apply {
+                text = "(kategori habis)"
+                textSize = 12f
+                setTextColor(Color.parseColor("#7A7A80"))
+                gravity = Gravity.CENTER
+                setPadding(0, dp(20), 0, dp(20))
+            }
+            grid.addView(empty)
         }
         scroll.addView(grid)
         panel.addView(scroll)
@@ -710,29 +843,30 @@ class AIKeyboardService : InputMethodService() {
 
         val actionRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(0), dp(8), dp(0), dp(8))
+            setPadding(dp(0), dp(6), dp(0), dp(6))
         }
         actionRow.addView(makeIconKey("Tanya", bg = 0xFF3B5BFE.toInt(), tintWhite = true) {
             onAskAiPressed()
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        }, LinearLayout.LayoutParams(0, dp(36), 1f))
         actionRow.addView(makeIconKey("Hapus", bg = 0xFF3A3A3D.toInt()) {
             aiQueryBuilder.clear()
             aiQueryText.text = "(ketik pake tombol di bawah)"
             aiQueryText.setTextColor(Color.parseColor("#6E6E73"))
             aiResponseText.text = ""
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        }, LinearLayout.LayoutParams(0, dp(36), 1f))
         actionRow.addView(makeIconKey("Sisip", bg = 0xFF3A3A3D.toInt()) {
             val reply = aiResponseText.text?.toString().orEmpty()
             if (reply.isNotBlank() && reply != "⏳ Mikir...") {
                 currentInputConnection?.commitText(reply, 1)
             }
-        }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        }, LinearLayout.LayoutParams(0, dp(36), 1f))
         panel.addView(actionRow)
 
+        // Compact response area (smaller to give room for keyboard)
         val responseScroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(160)
+                dp(120)
             )
             background = makeDrawable(0xFF1F1F22.toInt(), 6f)
         }
@@ -745,8 +879,50 @@ class AIKeyboardService : InputMethodService() {
         responseScroll.addView(aiResponseText)
         panel.addView(responseScroll)
 
-        // re-add the bottom row so user can keep typing the question
-        panel.addView(buildBottomRow())
+        // Re-add full keyboard so user can keep typing the question
+        // (same buildKeyboardContainer that the main view uses)
+        // For AI panel we render keyboard without status text
+        val kbd = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val rows = when {
+            isSymbolsMode -> symbolPages[symbolPage]
+            isShift -> rowsAlphaShift
+            else -> rowsAlpha
+        }
+        if (isSymbolsMode) {
+            kbd.addView(buildLetterRow(rows[0]))
+            kbd.addView(buildLetterRow(rows[1]))
+            val row3 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(1), dp(1), dp(1), dp(1))
+            }
+            val shiftLabel = when (symbolPage) {
+                0 -> "=+/"; 1 -> "ABC"; else -> "?123"
+            }
+            val isLastPage = symbolPage == symbolPages.size - 1
+            row3.addView(makeRow3ActionKey(shiftLabel, weight = 1.0f) {
+                if (isLastPage) { isSymbolsMode = false; symbolPage = 0 } else symbolPage++
+                renderBody()
+            })
+            row3.addView(buildLetterRow(rows[2]))
+            row3.addView(makeRow3ActionKey("⌫", weight = 1.0f) { handleBackspace() })
+            kbd.addView(row3)
+        } else {
+            kbd.addView(buildLetterRow(rows[0]))
+            kbd.addView(buildLetterRow(rows[1]))
+            val row3 = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(dp(1), dp(1), dp(1), dp(1))
+            }
+            row3.addView(makeRow3ActionKey(if (isShift) "⇪" else "⇧", weight = 1.0f) {
+                isShift = !isShift
+                renderBody()
+            })
+            row3.addView(buildLetterRow(rows[2]))
+            row3.addView(makeRow3ActionKey("⌫", weight = 1.0f) { handleBackspace() })
+            kbd.addView(row3)
+        }
+        kbd.addView(buildBottomRow())
+        panel.addView(kbd)
 
         return panel
     }
